@@ -117,59 +117,26 @@ class HobbytronScraper:
         datas = curr.fetchall()
         product_datas = list()
         for data in datas:
-            current_product = {'Handle': '', 'Title': '', 'SKU': '', 'Description': '', 'Cost': 0.0, 'Price': 0.0,
-                'ProductCategory': '', 'CompareAtPrice': 0.0, 'ImageSrc': '', 'ImageAltText': '', 'VideoSrc': '',
-                'Tags': '', 'Available': False, 'Variants':''
+            current_product = {'Handle': '', 'Title': '', 'Body (HTML)': '', 'Vendor': '', 'Product Category': '',
+                'Type':'', 'Tags': '', 'Published': True, 'Option1 Name': '', 'Option1 Value': '',
+                'Option2 Name': '', 'Option2 Value': '', 'Option3 Name': '', 'Option3 Value': '',
+                'Variant SKU': '', 'Variant Grams': 0.0, 'Variant Inventory Tracker': 'shopify',
+                'Variant Inventory Qty': 0, 'Variant Inventory Policy': 'deny', 'Variant Fulfillment Service': 'manual',
+                'Variant Price': 0.0, 'Variant Compare At Price': 0.0, 'Variant Requires Shipping': True,
+                'Variant Taxable': True, 'Variant Barcode': '', 'Image Src': '', 'Image Position': '',
+                'Image Alt Text': '', 'Gift Card': True, 'SEO Title': '', 'SEO Description': '',
+                'Google Shopping / Google Product Category': '', 'Google Shopping / Gender': '', 'Google Shopping / Age Group': '',
+                'Google Shopping / MPN': '', 'Google Shopping / Condition': 'New', 'Google Shopping / Custom Product': '',
+                'Google Shopping / Custom Label 0': '', 'Google Shopping / Custom Label 1': '', 'Google Shopping / Custom Label 2': '',
+                'Google Shopping / Custom Label 3': '', 'Google Shopping / Custom Label 4': '', 'Collection URL (product.metafields.custom.collection_url)': '',
+                'enable_best_price (product.metafields.custom.enable_best_price)': True, 'Google: Custom Product (product.metafields.mm-google-shopping.custom_product)': '',
+                'Product rating count (product.metafields.reviews.rating_count)': '', 'Variant Image': '',
+                'Variant Weight Unit': 'lb', 'Variant Tax Code': '', 'Cost per item': 0.0, 'Included / United States': True,
+                'Price / United States': '', 'Included / United States': True, 'Price / United States': '',
+                'Video Src': '', 'Video Name': '', 'Variants List':'', 'Image Src List': '', 'Image Alt Text List': ''
             }
 
             tree = HTMLParser(data[1])
-            product_elem = tree.css_first('div.card.card--collapsed.card--sticky')
-            current_product['Handle'] = data[0].split('/')[-1]
-            title_elem = product_elem.css_first('h1')
-
-            if title_elem is not None:
-                current_product['Title'] = title_elem.text(strip=True)
-
-            sku_elem = product_elem.css_first('div.product-meta > div.product-meta__reference > span.product-meta__sku > span.product-meta__sku-number')
-            if sku_elem is not None:
-                current_product['SKU'] = sku_elem.text(strip=True)
-
-            desc_elem = tree.css_first('div.product-block-list__item--description > div.card')
-            if desc_elem is not None:
-                current_product['Description'] = desc_elem.html
-
-            cost_elem = tree.css_first('div.product-form__info-content > div.price-list > span.price.price--highlight')
-            if cost_elem is not None:
-                current_product['Cost'] = self.extract_price(cost_elem.text(strip=True))
-            else:
-                cost_elem = tree.css_first('div.product-form__info-content > div.price-list > span.price')
-                if cost_elem is not None:
-                    current_product['Cost'] = self.extract_price(cost_elem.text(strip=True))
-
-            current_product['Price'] = self.get_price(current_product['Cost'])
-
-            cat_elems = tree.css('li.breadcrumb__item')
-            cat_list = list()
-            for elem in cat_elems:
-                cat_list.append(elem.text(strip=True))
-            current_product['ProductCategory'] = ', '.join(cat_list)
-
-            compare_at_price_elem = tree.css_first('div.product-form__info-content > div.price-list > span.price.price--compare')
-            if compare_at_price_elem is not None:
-                current_product['CompareAtPrice'] = self.extract_price(compare_at_price_elem.text(strip=True))
-
-            image_elems = tree.css('a.product-gallery__thumbnail')
-            image_src_list = list()
-            image_alt_text_list = list()
-            for elem in image_elems:
-                image_src_list.append(urljoin(self.base_url, elem.attributes.get('href').split('?')[0]))
-                image_alt_text_list.append(elem.css_first('img').attributes.get('alt'))
-            current_product['ImageSrc'] = ', '.join(image_src_list)
-            current_product['ImageAltText'] = ', '.join(image_alt_text_list)
-
-            video_elem = desc_elem.css_first('div.rte.text--pull > p > iframe')
-            if video_elem is not None:
-                current_product['VideoSrc'] = video_elem.attributes.get('src')
 
             script_tags = tree.css('script[type="text/javascript"]')
 
@@ -190,8 +157,8 @@ class HobbytronScraper:
                             .replace('tags:', '"tags":').replace('available:', '"available":')\
                             .replace('variants:', '"variants":')
                         product_data = json.loads(product_data_str)
+                        # print(product_data)
                         current_product['Tags'] = ', '.join(product_data['tags'])
-                        current_product['Available'] = product_data['available']
                         current_product['Variants'] = product_data['variants']
 
                         # variants = product_data['variants']
@@ -217,14 +184,79 @@ class HobbytronScraper:
             else:
                 print("Relevant script tag not found.")
 
+            product_elem = tree.css_first('div.card.card--collapsed.card--sticky')
+            current_product['Handle'] = data[0].split('/')[-1]
+
+            title_elem = product_elem.css_first('h1')
+            if title_elem is not None:
+                current_product['Title'] = title_elem.text(strip=True)
+
+            desc_elem = tree.css_first('div.product-block-list__item--description > div.card')
+            if desc_elem is not None:
+                current_product['Body (HTML)'] = desc_elem.html
+
+            current_product['Vendor'] = 'Hobbytron'
+
+            cat_elems = tree.css('li.breadcrumb__item')
+            cat_list = list()
+            for elem in cat_elems:
+                cat_list.append(elem.text(strip=True))
+            current_product['Product Category'] = ' > '.join(cat_list)
+
+            current_product['Type'] = ''
+
+            option_elems = tree.css('span.product-form__option-name.text--strong')
+            if option_elems is not None:
+                option_name_list = list()
+                for index, elem in enumerate(option_elems):
+                    # print(elem.html)
+                    current_product[f'Option{index + 1} Name'] = elem.text(strip=True).split(':')[0]
+
+            # sku_elem = product_elem.css_first('div.product-meta > div.product-meta__reference > span.product-meta__sku > span.product-meta__sku-number')
+            # if sku_elem is not None:
+            #     current_product['SKU'] = sku_elem.text(strip=True)
+
+            # cost_elem = tree.css_first('div.product-form__info-content > div.price-list > span.price.price--highlight')
+            # if cost_elem is not None:
+            #     current_product['Cost per item'] = self.extract_price(cost_elem.text(strip=True))
+            # else:
+            #     cost_elem = tree.css_first('div.product-form__info-content > div.price-list > span.price')
+            #     if cost_elem is not None:
+            #         current_product['Cost'] = self.extract_price(cost_elem.text(strip=True))
+
+            # current_product['Price'] = self.get_price(current_product['Cost'])
+
+            # compare_at_price_elem = tree.css_first('div.product-form__info-content > div.price-list > span.price.price--compare')
+            # if compare_at_price_elem is not None:
+            #     current_product['CompareAtPrice'] = self.extract_price(compare_at_price_elem.text(strip=True))
+
+            image_elems = tree.css('a.product-gallery__thumbnail')
+            image_src_list = list()
+            image_alt_text_list = list()
+            for elem in image_elems:
+                image_src_list.append(urljoin(self.base_url, elem.attributes.get('href').split('?')[0]))
+                image_alt_text_list.append(elem.css_first('img').attributes.get('alt'))
+            current_product['Image Src List'] = ', '.join(image_src_list)
+            current_product['Image Alt Text List'] = ', '.join(image_alt_text_list)
+
+            video_elems = desc_elem.css('iframe')
+            video_list = list()
+            if video_elems is not None:
+                for video_elem in video_elems:
+                    video_src = video_elem.attributes.get('src')
+                    video_list.append(video_src)
+                current_product['Video Src'] = ','.join(video_list)
 
             product_datas.append(current_product)
 
             # Using Pandas
             df = pd.DataFrame.from_records(product_datas)
+
+            # Breakdown Variants
             df = df.explode('Variants', ignore_index=True)
-            print(df)
-            df.to_csv('products_output.csv', index=False, sep=';')
+            # df['']
+
+            df.to_csv('products_output.csv', index=False, sep=',')
 
             # Using Duck DB
             # con = duckdb.connect()
@@ -276,7 +308,7 @@ class HobbytronScraper:
 
 
 if __name__ == '__main__':
-    urls = ['https://hobbytron.com/products/sonic-rc-helicopter', 'https://hobbytron.com/products/millennium-falcon-motion-sensing-quadcopter-by-world-tech-toys', 'https://hobbytron.com/products/luggage-playsets']
+    urls = ['https://hobbytron.com/products/sonic-rc-helicopter', 'https://hobbytron.com/products/millennium-falcon-motion-sensing-quadcopter-by-world-tech-toys', 'https://hobbytron.com/products/luggage-playsets', 'https://hobbytron.com/products/ford-f-150-police-monster-struck-and-ford-f-250-super-duty-rc-truck-1-14-scale-bundle']
 
     hs = HobbytronScraper()
     # products_htmls = asyncio.run(hs.fetch_all(urls))
