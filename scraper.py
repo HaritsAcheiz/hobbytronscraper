@@ -11,6 +11,7 @@ import math
 from urllib.parse import urljoin
 import json
 import pandas as pd
+import ast
 
 @dataclass
 class HobbytronScraper:
@@ -53,6 +54,31 @@ class HobbytronScraper:
             return match.group(1)
 
         return None
+
+
+    def get_review(self, product_id):
+        url = 'https://hobbytron.com/search?view=static-recently-viewed-products&type=product&q=id:6554003701863'
+
+
+    def extract_variants(self, df):
+        df['Option1 Value'] = df['Variants'].apply(lambda x: x['option1'])
+        df['Option2 Value'] = df['Variants'].apply(lambda x: x['option2'])
+        df['Option3 Value'] = df['Variants'].apply(lambda x: x['option3'])
+        df['Variant SKU'] = df['Variants'].apply(lambda x: x['sku'])
+        df['Variant Grams'] = df['Variants'].apply(lambda x: round(x['weight']/100, 2))
+        df['Variant Inventory Qty'] = df['Variants'].apply(lambda x: 10 if x['available'] else 0)
+        df['Cost per item'] = df['Variants'].apply(lambda x: round(x['price']/100, 2))
+        df['Variant Price'] = df['Cost per item'].apply(self.get_price)
+        df['Variant Compare At Price'] = df['Variants'].apply(lambda x: round(x['compare_at_price']/100, 2) if not pd.isna(x['compare_at_price']) else '')
+        df['Variant Requires Shipping'] = df['Variants'].apply(lambda x: x['requires_shipping'])
+        df['Taxable'] = df['Variants'].apply(lambda x: x['taxable'])
+        df['Image Position'] = df['Variants'].apply(lambda x: x['featured_image']['position'] if not pd.isna(x['featured_image']) else '')
+        df['Image Alt Text'] = df['Variants'].apply(lambda x: x['title'] if not pd.isna(x['featured_image']) else '')
+        df['Variant Image'] = df['Variants'].apply(lambda x: 'https:' + x['featured_image']['src'].split('?')[0] if not pd.isna(x['featured_image']) else '')
+
+
+
+        return df
 
 
     async def fetch(self, aclient, url, limit):
@@ -118,7 +144,7 @@ class HobbytronScraper:
         product_datas = list()
         for data in datas:
             current_product = {'Handle': '', 'Title': '', 'Body (HTML)': '', 'Vendor': '', 'Product Category': '',
-                'Type':'', 'Tags': '', 'Published': True, 'Option1 Name': '', 'Option1 Value': '',
+                'Type':'', 'Tags': '', 'Published': True, 'Option1 Name': 'Title', 'Option1 Value': 'Default Title',
                 'Option2 Name': '', 'Option2 Value': '', 'Option3 Name': '', 'Option3 Value': '',
                 'Variant SKU': '', 'Variant Grams': 0.0, 'Variant Inventory Tracker': 'shopify',
                 'Variant Inventory Qty': 0, 'Variant Inventory Policy': 'deny', 'Variant Fulfillment Service': 'manual',
@@ -133,7 +159,7 @@ class HobbytronScraper:
                 'Product rating count (product.metafields.reviews.rating_count)': '', 'Variant Image': '',
                 'Variant Weight Unit': 'lb', 'Variant Tax Code': '', 'Cost per item': 0.0, 'Included / United States': True,
                 'Price / United States': '', 'Included / United States': True, 'Price / United States': '',
-                'Video Src': '', 'Video Name': '', 'Variants List':'', 'Image Src List': '', 'Image Alt Text List': ''
+                'Video Src': '', 'Video Name': '', 'Variants': '', 'Image Src List': '', 'Image Alt Text List': ''
             }
 
             tree = HTMLParser(data[1])
@@ -247,6 +273,11 @@ class HobbytronScraper:
                     video_list.append(video_src)
                 current_product['Video Src'] = ','.join(video_list)
 
+            # rating_elem = tree.css_first('div#stamped-main-widget')
+            # if rating_elem is not None:
+            #     print(rating_elem.html)
+                # current_product['Product rating count (product.metafields.reviews.rating_count)'] = rating_elem.attributes.get('data-rating')
+
             product_datas.append(current_product)
 
             # Using Pandas
@@ -254,7 +285,8 @@ class HobbytronScraper:
 
             # Breakdown Variants
             df = df.explode('Variants', ignore_index=True)
-            # df['']
+            df = self.extract_variants(df)
+
 
             df.to_csv('products_output.csv', index=False, sep=',')
 
