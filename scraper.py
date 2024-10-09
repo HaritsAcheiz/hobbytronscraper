@@ -1,4 +1,5 @@
 from httpx import AsyncClient
+from pandas.core.base import NoNewAttributesMixin
 from selectolax.parser import HTMLParser
 from dataclasses import dataclass
 from dotenv import load_dotenv
@@ -71,12 +72,10 @@ class HobbytronScraper:
         df['Variant Price'] = df['Cost per item'].apply(self.get_price)
         df['Variant Compare At Price'] = df['Variants'].apply(lambda x: round(x['compare_at_price']/100, 2) if not pd.isna(x['compare_at_price']) else '')
         df['Variant Requires Shipping'] = df['Variants'].apply(lambda x: x['requires_shipping'])
-        df['Taxable'] = df['Variants'].apply(lambda x: x['taxable'])
+        df['Variant Taxable'] = df['Variants'].apply(lambda x: x['taxable'])
         df['Image Position'] = df['Variants'].apply(lambda x: x['featured_image']['position'] if not pd.isna(x['featured_image']) else '')
         df['Image Alt Text'] = df['Variants'].apply(lambda x: x['title'] if not pd.isna(x['featured_image']) else '')
         df['Variant Image'] = df['Variants'].apply(lambda x: 'https:' + x['featured_image']['src'].split('?')[0] if not pd.isna(x['featured_image']) else '')
-
-
 
         return df
 
@@ -158,57 +157,12 @@ class HobbytronScraper:
                 'enable_best_price (product.metafields.custom.enable_best_price)': True, 'Google: Custom Product (product.metafields.mm-google-shopping.custom_product)': '',
                 'Product rating count (product.metafields.reviews.rating_count)': '', 'Variant Image': '',
                 'Variant Weight Unit': 'lb', 'Variant Tax Code': '', 'Cost per item': 0.0, 'Included / United States': True,
-                'Price / United States': '', 'Included / United States': True, 'Price / United States': '',
-                'Video Src': '', 'Video Name': '', 'Variants': '', 'Image Src List': '', 'Image Alt Text List': ''
+                'Price / United States': '', 'Included / United States': True, 'Price / United States': '', 'Compare At Price / United States': '',
+                'Included / International': '', 'Price / International': '', 'Compare At Price / International': '', 'Status':'draft',
+                'Video Src': '', 'Video Name': '', 'Variants': ''
             }
 
             tree = HTMLParser(data[1])
-
-            script_tags = tree.css('script[type="text/javascript"]')
-
-            script_content = None
-
-            for script in script_tags:
-                if 'window.BoosterApps.common.product' in script.text():
-                    script_content = script.text()
-                    break
-
-            if script_content:
-                product_data_match = re.search(r'window\.BoosterApps\.common\.product\s*=\s*({.*?});', script_content, re.DOTALL)
-                if product_data_match:
-                    try:
-                        product_data_str = product_data_match.group(1)
-                        product_data_str = product_data_str.replace('id:', '"id":').replace('title:', '"title":')\
-                            .replace('price:', '"price":').replace('handle:','"handle":' )\
-                            .replace('tags:', '"tags":').replace('available:', '"available":')\
-                            .replace('variants:', '"variants":')
-                        product_data = json.loads(product_data_str)
-                        # print(product_data)
-                        current_product['Tags'] = ', '.join(product_data['tags'])
-                        current_product['Variants'] = product_data['variants']
-
-                        # variants = product_data['variants']
-                        # current_variant = dict()
-                        # list_variant = list()
-                        # for variant in variants:
-                        #     current_variant['RequiresShipping'] = variant['requires_shipping']
-                        #     current_variant['Taxable'] = variant['taxable']
-                        #     current_variant['Weight'] = variant['weight']
-                        #     current_variant['InventoryManagement'] = variant['inventory_management']
-                        #     current_variant['Barcode'] = variant['barcode']
-                        #     current_variant['Option1Name'] = variant['option1']
-                        #     current_variant['Option2Name'] = variant['option2']
-                        #     current_variant['Option3Name'] = variant['option3']
-                        #     list_variant.append(current_variant)
-                        # current_product['Variants'] = list_variant
-
-                    except json.JSONDecodeError as e:
-                        print(f"Error parsing product data: {e}")
-                        print(product_data_str)
-                else:
-                    print("Product data not found in the script.")
-            else:
-                print("Relevant script tag not found.")
 
             product_elem = tree.css_first('div.card.card--collapsed.card--sticky')
             current_product['Handle'] = data[0].split('/')[-1]
@@ -231,12 +185,114 @@ class HobbytronScraper:
 
             current_product['Type'] = ''
 
-            option_elems = tree.css('span.product-form__option-name.text--strong')
-            if option_elems is not None:
-                option_name_list = list()
-                for index, elem in enumerate(option_elems):
-                    # print(elem.html)
-                    current_product[f'Option{index + 1} Name'] = elem.text(strip=True).split(':')[0]
+            battery_elem = tree.css_first('div.battry-upsell__content')
+            if battery_elem is not None:
+                current_product['Battery Option Value'] = battery_elem.css_first('p.battry_title').text(strip=True)
+                current_product['Battery Price'] = float(self.extract_price(battery_elem.css_first('p.battry_price').text(strip=True)))
+
+            option_elem = tree.css_first('span.product-form__option-name.text--strong')
+            if (battery_elem is not None) & (option_elem is not None):
+                current_product[f'Option1 Name'] = option_elem.text(strip=True).split(':')[0]
+                current_product[f'Option2 Name'] = 'Battery'
+            elif (battery_elem is not None) & (option_elem is None):
+                current_product[f'Option2 Name'] = 'Battery'
+            elif (battery_elem is None) & (option_elem is not None):
+                current_product[f'Option1 Name'] = option_elem.text(strip=True).split(':')[0]
+
+            script_tags = tree.css('script[type="text/javascript"]')
+
+            script_content = None
+
+            for script in script_tags:
+                if 'window.BoosterApps.common.product' in script.text():
+                    script_content = script.text()
+                    break
+
+            if script_content:
+                product_data_match = re.search(r'window\.BoosterApps\.common\.product\s*=\s*({.*?});', script_content, re.DOTALL)
+                if product_data_match:
+                    try:
+                        product_data_str = product_data_match.group(1)
+                        product_data_str = product_data_str.replace('id:', '"id":').replace('title:', '"title":')\
+                            .replace('price:', '"price":').replace('handle:','"handle":' )\
+                            .replace('tags:', '"tags":').replace('available:', '"available":')\
+                            .replace('variants:', '"variants":')
+                        product_data = json.loads(product_data_str)
+                        current_product['Tags'] = ', '.join(product_data['tags'])
+                        current_product['Variants'] = product_data['variants'].copy()
+                        for variant in product_data['variants']:
+                            if battery_elem is not None:
+                                additional_option = {'id': variant['id'],
+                                    'title': variant['title'],
+                                    'option1': variant['option1'],
+                                    'option2': current_product['Battery Option Value'],
+                                    'option3': variant['option3'],
+                                    'sku': f"{variant['sku']}-B",
+                                    'requires_shipping': variant['requires_shipping'],
+                                    'taxable': variant['taxable'],
+                                    'available': variant['available'],
+                                    'name': variant['name'],
+                                    'public_title': variant['public_title'],
+                                    'options': variant['options'],
+                                    'price': variant['price'] + current_product['Battery Price'],
+                                    'weight': variant['weight'],
+                                    'compare_at_price': variant['compare_at_price'],
+                                    'inventory_management': variant['inventory_management'],
+                                    'barcode': variant['barcode'],
+                                    'requires_selling_plan': variant['requires_selling_plan'],
+                                    'selling_plan_allocations': variant['selling_plan_allocations']
+                                }
+
+                                if variant['featured_image'] is not None:
+                                    additional_option['featured_image'] = {'id': variant['featured_image']['id'],
+                                        'product_id': variant['featured_image']['product_id'],
+                                        'position': variant['featured_image']['position'],
+                                        'created_at': variant['featured_image']['created_at'],
+                                        'updated_at': variant['featured_image']['updated_at'],
+                                        'alt': variant['featured_image']['alt'],
+                                        'width': variant['featured_image']['width'],
+                                        'height': variant['featured_image']['height'],
+                                        'src': variant['featured_image']['src'],
+                                        'variant_ids': variant['featured_image']['variant_ids']
+                                    }
+
+                                    additional_option['featured_media'] = {'alt': variant['featured_media']['alt'],
+                                        'id': variant['featured_media']['id'],
+                                        'position': variant['featured_media']['position'],
+                                        'preview_image': {'aspect_ratio': variant['featured_media']['preview_image']['aspect_ratio'],
+                                            'height': variant['featured_media']['preview_image']['height'],
+                                            'width': variant['featured_media']['preview_image']['width'],
+                                            'src': variant['featured_media']['preview_image']['src']
+                                        }
+                                    }
+
+                                else:
+                                    additional_option['featured_image'] = None
+                                    additional_option['featured_media'] = None
+
+                                current_product['Variants'].append(additional_option)
+
+                        # variants = product_data['variants']
+                        # current_variant = dict()
+                        # list_variant = list()
+                        # for variant in variants:
+                        #     current_variant['RequiresShipping'] = variant['requires_shipping']
+                        #     current_variant['Taxable'] = variant['taxable']
+                        #     current_variant['Weight'] = variant['weight']
+                        #     current_variant['InventoryManagement'] = variant['inventory_management']
+                        #     current_variant['Barcode'] = variant['barcode']
+                        #     current_variant['Option1Name'] = variant['option1']
+                        #     current_variant['Option2Name'] = variant['option2']
+                        #     current_variant['Option3Name'] = variant['option3']
+                        #     list_variant.append(current_variant)
+                        # current_product['Variants'] = list_variant
+
+                    except json.JSONDecodeError as e:
+                        print(f"Error parsing product data: {e}")
+                else:
+                    print("Product data not found in the script.")
+            else:
+                print("Relevant script tag not found.")
 
             # sku_elem = product_elem.css_first('div.product-meta > div.product-meta__reference > span.product-meta__sku > span.product-meta__sku-number')
             # if sku_elem is not None:
@@ -262,8 +318,9 @@ class HobbytronScraper:
             for elem in image_elems:
                 image_src_list.append(urljoin(self.base_url, elem.attributes.get('href').split('?')[0]))
                 image_alt_text_list.append(elem.css_first('img').attributes.get('alt'))
-            current_product['Image Src List'] = ', '.join(image_src_list)
-            current_product['Image Alt Text List'] = ', '.join(image_alt_text_list)
+            current_product['Image Src'] = image_src_list
+            # current_product['Image Alt Text'] = image_alt_text_list
+            current_product['Image Alt Text'] = ''
 
             video_elems = desc_elem.css('iframe')
             video_list = list()
@@ -287,6 +344,39 @@ class HobbytronScraper:
             df = df.explode('Variants', ignore_index=True)
             df = self.extract_variants(df)
 
+
+            variant_row_unused_columns = ['Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags', 'Published', 'Option1 Name',
+                'Option2 Name', 'Option3 Name', 'Image Src', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description',
+                'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group',
+                'Google Shopping / MPN', 'Google Shopping / Condition', 'Google Shopping / Custom Product',
+                'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2',
+                'Google Shopping / Custom Label 3', 'Google Shopping / Custom Label 4', 'Collection URL (product.metafields.custom.collection_url)',
+                'enable_best_price (product.metafields.custom.enable_best_price)', 'Google: Custom Product (product.metafields.mm-google-shopping.custom_product)',
+                'Product rating count (product.metafields.reviews.rating_count)', 'Included / United States', 'Price / United States',
+                'Compare At Price / United States', 'Included / International', 'Price / International', 'Compare At Price / International', 'Status'
+            ]
+
+            df.loc[df.duplicated('Handle', keep='first'), variant_row_unused_columns] = ''
+
+            df = df.explode('Image Src', ignore_index=True)
+
+            images_row_unused_columns = ['Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags',
+                'Published', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Option3 Name', 'Option3 Value', 'Variant SKU',
+                'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty', 'Variant Inventory Policy', 'Variant Fulfillment Service',
+                'Variant Price', 'Variant Compare At Price', 'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode',
+                'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category',
+                'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN', 'Google Shopping / Condition',
+                'Google Shopping / Custom Product', 'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2',
+                'Google Shopping / Custom Label 3', 'Google Shopping / Custom Label 4', 'Collection URL (product.metafields.custom.collection_url)',
+                'enable_best_price (product.metafields.custom.enable_best_price)', 'Google: Custom Product (product.metafields.mm-google-shopping.custom_product)',
+                'Product rating count (product.metafields.reviews.rating_count)', 'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item',
+                'Included / United States', 'Price / United States', 'Included / United States', 'Price / United States', 'Compare At Price / United States',
+                'Included / International', 'Price / International', 'Compare At Price / International', 'Status', 'Video Src', 'Video Name', 'Variants'
+            ]
+
+            df.loc[df.duplicated('Variant SKU', keep='first'), images_row_unused_columns] = ''
+
+            df.drop(columns=['Variants', 'Battery Option Value', 'Battery Price'])
 
             df.to_csv('products_output.csv', index=False, sep=',')
 
@@ -340,7 +430,7 @@ class HobbytronScraper:
 
 
 if __name__ == '__main__':
-    urls = ['https://hobbytron.com/products/sonic-rc-helicopter', 'https://hobbytron.com/products/millennium-falcon-motion-sensing-quadcopter-by-world-tech-toys', 'https://hobbytron.com/products/luggage-playsets', 'https://hobbytron.com/products/ford-f-150-police-monster-struck-and-ford-f-250-super-duty-rc-truck-1-14-scale-bundle']
+    urls = ['https://hobbytron.com/products/sonic-rc-helicopter', 'https://hobbytron.com/products/millennium-falcon-motion-sensing-quadcopter-by-world-tech-toys', 'https://hobbytron.com/products/luggage-playsets', 'https://hobbytron.com/products/ford-f-150-police-monster-struck-and-ford-f-250-super-duty-rc-truck-1-14-scale-bundle', 'https://hobbytron.com/products/buzz-lightyear-mickey-mouse-electronic-tabletop-basketball-playset']
 
     hs = HobbytronScraper()
     # products_htmls = asyncio.run(hs.fetch_all(urls))
