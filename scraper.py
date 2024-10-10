@@ -30,21 +30,21 @@ class HobbytronScraper:
 
     def get_price(self, wholesaleprice):
         float_wholesaleprice = float(math.ceil(float(wholesaleprice)))
-        if (wholesaleprice is None) or (wholesaleprice == 0):
-            result = 0
+        if (wholesaleprice is None) or (float_wholesaleprice == 0) or (wholesaleprice == '0.00'):
+            result = "0.00"
         else:
             result = float_wholesaleprice - round(float_wholesaleprice * 5 / 100, 2)
 
-        return result
+        return f"{result:.2f}"
 
 
     def get_compare_at_price(self, price):
         if (price is None) or (price == 0):
-            result = 0
+            result = "0.00"
         else:
             result = round(float(math.ceil(price * 1.20)), 2)
 
-        return result
+        return f"{result:.2f}"
 
 
     def extract_number(self, input_string):
@@ -73,8 +73,10 @@ class HobbytronScraper:
         df['Variant Compare At Price'] = df['Variants'].apply(lambda x: round(x['compare_at_price']/100, 2) if not pd.isna(x['compare_at_price']) else '')
         df['Variant Requires Shipping'] = df['Variants'].apply(lambda x: x['requires_shipping'])
         df['Variant Taxable'] = df['Variants'].apply(lambda x: x['taxable'])
-        df['Image Position'] = df['Variants'].apply(lambda x: x['featured_image']['position'] if not pd.isna(x['featured_image']) else '')
-        df['Image Alt Text'] = df['Variants'].apply(lambda x: x['title'] if not pd.isna(x['featured_image']) else '')
+        # df['Image Position'] = df['Variants'].apply(lambda x: x['featured_image']['position'] if not pd.isna(x['featured_image']) else '')
+        df['Image Position'] = ''
+        # df['Image Alt Text'] = df['Variants'].apply(lambda x: x['title'] if not pd.isna(x['featured_image']) else '')
+        df['Image Alt Text'] = ''
         df['Variant Image'] = df['Variants'].apply(lambda x: 'https:' + x['featured_image']['src'].split('?')[0] if not pd.isna(x['featured_image']) else '')
 
         return df
@@ -143,13 +145,13 @@ class HobbytronScraper:
         product_datas = list()
         for data in datas:
             current_product = {'Handle': '', 'Title': '', 'Body (HTML)': '', 'Vendor': '', 'Product Category': '',
-                'Type':'', 'Tags': '', 'Published': True, 'Option1 Name': 'Title', 'Option1 Value': 'Default Title',
+                'Type':'', 'Tags': '', 'Published': True, 'Option1 Name': '', 'Option1 Value': '',
                 'Option2 Name': '', 'Option2 Value': '', 'Option3 Name': '', 'Option3 Value': '',
                 'Variant SKU': '', 'Variant Grams': 0.0, 'Variant Inventory Tracker': 'shopify',
                 'Variant Inventory Qty': 0, 'Variant Inventory Policy': 'deny', 'Variant Fulfillment Service': 'manual',
                 'Variant Price': 0.0, 'Variant Compare At Price': 0.0, 'Variant Requires Shipping': True,
                 'Variant Taxable': True, 'Variant Barcode': '', 'Image Src': '', 'Image Position': '',
-                'Image Alt Text': '', 'Gift Card': True, 'SEO Title': '', 'SEO Description': '',
+                'Image Alt Text': '', 'Gift Card': '', 'SEO Title': '', 'SEO Description': '',
                 'Google Shopping / Google Product Category': '', 'Google Shopping / Gender': '', 'Google Shopping / Age Group': '',
                 'Google Shopping / MPN': '', 'Google Shopping / Condition': 'New', 'Google Shopping / Custom Product': '',
                 'Google Shopping / Custom Label 0': '', 'Google Shopping / Custom Label 1': '', 'Google Shopping / Custom Label 2': '',
@@ -195,9 +197,10 @@ class HobbytronScraper:
                 current_product[f'Option1 Name'] = option_elem.text(strip=True).split(':')[0]
                 current_product[f'Option2 Name'] = 'Battery'
             elif (battery_elem is not None) & (option_elem is None):
-                current_product[f'Option2 Name'] = 'Battery'
+                current_product[f'Option1 Name'] = 'Battery'
             elif (battery_elem is None) & (option_elem is not None):
                 current_product[f'Option1 Name'] = option_elem.text(strip=True).split(':')[0]
+                # current_product[f'Option1 Name'] = ''
 
             script_tags = tree.css('script[type="text/javascript"]')
 
@@ -219,58 +222,118 @@ class HobbytronScraper:
                             .replace('variants:', '"variants":')
                         product_data = json.loads(product_data_str)
                         current_product['Tags'] = ', '.join(product_data['tags'])
-                        current_product['Variants'] = product_data['variants'].copy()
-                        for variant in product_data['variants']:
+                        if len(product_data['variants']) == 1:
                             if battery_elem is not None:
-                                additional_option = {'id': variant['id'],
-                                    'title': variant['title'],
-                                    'option1': variant['option1'],
-                                    'option2': current_product['Battery Option Value'],
-                                    'option3': variant['option3'],
-                                    'sku': f"{variant['sku']}-B",
-                                    'requires_shipping': variant['requires_shipping'],
-                                    'taxable': variant['taxable'],
-                                    'available': variant['available'],
-                                    'name': variant['name'],
-                                    'public_title': variant['public_title'],
-                                    'options': variant['options'],
-                                    'price': variant['price'] + current_product['Battery Price'],
-                                    'weight': variant['weight'],
-                                    'compare_at_price': variant['compare_at_price'],
-                                    'inventory_management': variant['inventory_management'],
-                                    'barcode': variant['barcode'],
-                                    'requires_selling_plan': variant['requires_selling_plan'],
-                                    'selling_plan_allocations': variant['selling_plan_allocations']
-                                }
-
-                                if variant['featured_image'] is not None:
-                                    additional_option['featured_image'] = {'id': variant['featured_image']['id'],
-                                        'product_id': variant['featured_image']['product_id'],
-                                        'position': variant['featured_image']['position'],
-                                        'created_at': variant['featured_image']['created_at'],
-                                        'updated_at': variant['featured_image']['updated_at'],
-                                        'alt': variant['featured_image']['alt'],
-                                        'width': variant['featured_image']['width'],
-                                        'height': variant['featured_image']['height'],
-                                        'src': variant['featured_image']['src'],
-                                        'variant_ids': variant['featured_image']['variant_ids']
+                                product_data['variants'][0]['option1'] = 'None'
+                            else:
+                                product_data['variants'][0]['option1'] = ''
+                            current_product['Variants'] = product_data['variants'].copy()
+                            for variant in product_data['variants']:
+                                if battery_elem is not None:
+                                    additional_option = {'id': variant['id'],
+                                        'title': variant['title'],
+                                        'option1': current_product['Battery Option Value'],
+                                        'option2': variant['option2'],
+                                        'option3': variant['option3'],
+                                        'sku': f"{variant['sku']}-B",
+                                        'requires_shipping': variant['requires_shipping'],
+                                        'taxable': variant['taxable'],
+                                        'available': variant['available'],
+                                        'name': variant['name'],
+                                        'public_title': variant['public_title'],
+                                        'options': variant['options'],
+                                        'price': variant['price'] + current_product['Battery Price'],
+                                        'weight': variant['weight'],
+                                        'compare_at_price': variant['compare_at_price'],
+                                        'inventory_management': variant['inventory_management'],
+                                        'barcode': variant['barcode'],
+                                        'requires_selling_plan': variant['requires_selling_plan'],
+                                        'selling_plan_allocations': variant['selling_plan_allocations']
                                     }
 
-                                    additional_option['featured_media'] = {'alt': variant['featured_media']['alt'],
-                                        'id': variant['featured_media']['id'],
-                                        'position': variant['featured_media']['position'],
-                                        'preview_image': {'aspect_ratio': variant['featured_media']['preview_image']['aspect_ratio'],
-                                            'height': variant['featured_media']['preview_image']['height'],
-                                            'width': variant['featured_media']['preview_image']['width'],
-                                            'src': variant['featured_media']['preview_image']['src']
+                                    if variant['featured_image'] is not None:
+                                        additional_option['featured_image'] = {'id': variant['featured_image']['id'],
+                                            'product_id': variant['featured_image']['product_id'],
+                                            'position': variant['featured_image']['position'],
+                                            'created_at': variant['featured_image']['created_at'],
+                                            'updated_at': variant['featured_image']['updated_at'],
+                                            'alt': variant['featured_image']['alt'],
+                                            'width': variant['featured_image']['width'],
+                                            'height': variant['featured_image']['height'],
+                                            'src': variant['featured_image']['src'],
+                                            'variant_ids': variant['featured_image']['variant_ids']
                                         }
+
+                                        additional_option['featured_media'] = {'alt': variant['featured_media']['alt'],
+                                            'id': variant['featured_media']['id'],
+                                            'position': variant['featured_media']['position'],
+                                            'preview_image': {'aspect_ratio': variant['featured_media']['preview_image']['aspect_ratio'],
+                                                'height': variant['featured_media']['preview_image']['height'],
+                                                'width': variant['featured_media']['preview_image']['width'],
+                                                'src': variant['featured_media']['preview_image']['src']
+                                            }
+                                        }
+
+                                    else:
+                                        additional_option['featured_image'] = None
+                                        additional_option['featured_media'] = None
+
+                                    current_product['Variants'].append(additional_option)
+
+                        else:
+                            current_product['Variants'] = product_data['variants'].copy()
+                            for variant in product_data['variants']:
+                                if battery_elem is not None:
+                                    variant['option2'] = 'None'
+                                    additional_option = {'id': variant['id'],
+                                        'title': variant['title'],
+                                        'option1': variant['option1'],
+                                        'option2': current_product['Battery Option Value'],
+                                        'option3': variant['option3'],
+                                        'sku': f"{variant['sku']}-B",
+                                        'requires_shipping': variant['requires_shipping'],
+                                        'taxable': variant['taxable'],
+                                        'available': variant['available'],
+                                        'name': variant['name'],
+                                        'public_title': variant['public_title'],
+                                        'options': variant['options'],
+                                        'price': variant['price'] + current_product['Battery Price'],
+                                        'weight': variant['weight'],
+                                        'compare_at_price': variant['compare_at_price'],
+                                        'inventory_management': variant['inventory_management'],
+                                        'barcode': variant['barcode'],
+                                        'requires_selling_plan': variant['requires_selling_plan'],
+                                        'selling_plan_allocations': variant['selling_plan_allocations']
                                     }
 
-                                else:
-                                    additional_option['featured_image'] = None
-                                    additional_option['featured_media'] = None
+                                    if variant['featured_image'] is not None:
+                                        additional_option['featured_image'] = {'id': variant['featured_image']['id'],
+                                            'product_id': variant['featured_image']['product_id'],
+                                            'position': variant['featured_image']['position'],
+                                            'created_at': variant['featured_image']['created_at'],
+                                            'updated_at': variant['featured_image']['updated_at'],
+                                            'alt': variant['featured_image']['alt'],
+                                            'width': variant['featured_image']['width'],
+                                            'height': variant['featured_image']['height'],
+                                            'src': variant['featured_image']['src'],
+                                            'variant_ids': variant['featured_image']['variant_ids']
+                                        }
 
-                                current_product['Variants'].append(additional_option)
+                                        additional_option['featured_media'] = {'alt': variant['featured_media']['alt'],
+                                            'id': variant['featured_media']['id'],
+                                            'position': variant['featured_media']['position'],
+                                            'preview_image': {'aspect_ratio': variant['featured_media']['preview_image']['aspect_ratio'],
+                                                'height': variant['featured_media']['preview_image']['height'],
+                                                'width': variant['featured_media']['preview_image']['width'],
+                                                'src': variant['featured_media']['preview_image']['src']
+                                            }
+                                        }
+
+                                    else:
+                                        additional_option['featured_image'] = None
+                                        additional_option['featured_media'] = None
+
+                                    current_product['Variants'].append(additional_option)
 
                         # variants = product_data['variants']
                         # current_variant = dict()
@@ -318,9 +381,10 @@ class HobbytronScraper:
             for elem in image_elems:
                 image_src_list.append(urljoin(self.base_url, elem.attributes.get('href').split('?')[0]))
                 image_alt_text_list.append(elem.css_first('img').attributes.get('alt'))
+            print(image_src_list, image_alt_text_list)
             current_product['Image Src'] = image_src_list
             # current_product['Image Alt Text'] = image_alt_text_list
-            current_product['Image Alt Text'] = ''
+            # current_product['Image Alt Text'] = ''
 
             video_elems = desc_elem.css('iframe')
             video_list = list()
@@ -346,7 +410,7 @@ class HobbytronScraper:
 
 
             variant_row_unused_columns = ['Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags', 'Published', 'Option1 Name',
-                'Option2 Name', 'Option3 Name', 'Image Src', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description',
+                'Option2 Name', 'Option3 Name', 'Image Src', 'Gift Card', 'SEO Title', 'SEO Description',
                 'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group',
                 'Google Shopping / MPN', 'Google Shopping / Condition', 'Google Shopping / Custom Product',
                 'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2',
@@ -359,6 +423,7 @@ class HobbytronScraper:
             df.loc[df.duplicated('Handle', keep='first'), variant_row_unused_columns] = ''
 
             df = df.explode('Image Src', ignore_index=True)
+            # df = df.set_index(['Image Src', 'Image Alt Text']).apply(pd.Series.explode).reset_index()
 
             images_row_unused_columns = ['Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags',
                 'Published', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Option3 Name', 'Option3 Value', 'Variant SKU',
