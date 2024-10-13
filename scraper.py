@@ -29,7 +29,7 @@ class HobbytronScraper:
         return None
 
     def get_price(self, wholesaleprice):
-        float_wholesaleprice = float(math.ceil(float(wholesaleprice)))
+        float_wholesaleprice = float(wholesaleprice)
         if (wholesaleprice is None) or (float_wholesaleprice == 0) or (wholesaleprice == '0.00'):
             result = "0.00"
         else:
@@ -55,6 +55,14 @@ class HobbytronScraper:
             return match.group(1)
 
         return None
+
+    def replace_hobbytron(self, html_content, replacement="Trendtimes"):
+        pattern = r'hobbytron(?![^<>]*["\'])'
+
+        # Perform the replacement
+        modified_html = re.sub(pattern, replacement, html_content, flags=re.IGNORECASE)
+
+        return modified_html
 
 
     def get_review(self, product_id):
@@ -116,14 +124,14 @@ class HobbytronScraper:
         return htmls
 
 
-    def insert_to_db(self, htmls):
-        if os.path.exists('hobbytron.db'):
-            os.remove('hobbytron.db')
-        conn = sqlite3.connect("hobbytron.db")
+    def insert_to_db(self, htmls, database_name, table_name):
+        if os.path.exists(database_name):
+            os.remove(database_name)
+        conn = sqlite3.connect(database_name)
         curr = conn.cursor()
         curr.execute(
-            """
-            CREATE TABLE IF NOT EXISTS products_src(
+            f"""
+            CREATE TABLE IF NOT EXISTS {table_name}(
             url TEXT,
             html BLOB
             )
@@ -132,15 +140,31 @@ class HobbytronScraper:
 
         for html in htmls:
             curr.execute(
-                "INSERT INTO products_src (url, html) VALUES(?,?)",
+                f"INSERT INTO {table_name} (url, html) VALUES(?,?)",
                 html)
             conn.commit()
 
 
-    def get_data(self):
-        conn = sqlite3.connect("hobbytron.db")
+    def get_product_urls(self):
+        conn = sqlite3.connect("hobbytron_collection.db")
         curr = conn.cursor()
-        curr.execute("SELECT url, html FROM  products_src")
+        curr.execute("SELECT url, html FROM collection_src")
+        datas = curr.fetchall()
+        product_urls = list()
+        for data in datas:
+            tree = HTMLParser(data[1])
+            product_elems = tree.css('div.product-list.product-list--collection > div > a')
+
+            for elem in product_elems:
+                product_url = urljoin(self.base_url, elem.attributes.get('href'))
+                product_urls.append(product_url)
+
+        return product_urls
+
+    def get_data(self):
+        conn = sqlite3.connect("hobbytron_product.db")
+        curr = conn.cursor()
+        curr.execute("SELECT url, html FROM  product_src")
         datas = curr.fetchall()
         product_datas = list()
         for data in datas:
@@ -160,8 +184,8 @@ class HobbytronScraper:
                 'Product rating count (product.metafields.reviews.rating_count)': '', 'Variant Image': '',
                 'Variant Weight Unit': 'lb', 'Variant Tax Code': '', 'Cost per item': 0.0, 'Included / United States': True,
                 'Price / United States': '', 'Included / United States': True, 'Price / United States': '', 'Compare At Price / United States': '',
-                'Included / International': '', 'Price / International': '', 'Compare At Price / International': '', 'Status':'draft',
-                'Video Src': '', 'Video Name': '', 'Variants': ''
+                'Included / International': '', 'Price / International': '', 'Compare At Price / International': '', 'Status':'active',
+                'Video Src': '', 'Video Name': '', 'Variants': '', 'Battery Option Value': '', 'Battery Price': ''
             }
 
             tree = HTMLParser(data[1])
@@ -189,7 +213,7 @@ class HobbytronScraper:
 
             battery_elem = tree.css_first('div.battry-upsell__content')
             if battery_elem is not None:
-                current_product['Battery Option Value'] = battery_elem.css_first('p.battry_title').text(strip=True)
+                current_product['Battery Option Value'] = battery_elem.css_first('p.battry_title').text(strip=True).replace('World Tech Toys ', '')
                 current_product['Battery Price'] = float(self.extract_price(battery_elem.css_first('p.battry_price').text(strip=True)))
 
             option_elem = tree.css_first('span.product-form__option-name.text--strong')
@@ -335,21 +359,6 @@ class HobbytronScraper:
 
                                     current_product['Variants'].append(additional_option)
 
-                        # variants = product_data['variants']
-                        # current_variant = dict()
-                        # list_variant = list()
-                        # for variant in variants:
-                        #     current_variant['RequiresShipping'] = variant['requires_shipping']
-                        #     current_variant['Taxable'] = variant['taxable']
-                        #     current_variant['Weight'] = variant['weight']
-                        #     current_variant['InventoryManagement'] = variant['inventory_management']
-                        #     current_variant['Barcode'] = variant['barcode']
-                        #     current_variant['Option1Name'] = variant['option1']
-                        #     current_variant['Option2Name'] = variant['option2']
-                        #     current_variant['Option3Name'] = variant['option3']
-                        #     list_variant.append(current_variant)
-                        # current_product['Variants'] = list_variant
-
                     except json.JSONDecodeError as e:
                         print(f"Error parsing product data: {e}")
                 else:
@@ -357,42 +366,22 @@ class HobbytronScraper:
             else:
                 print("Relevant script tag not found.")
 
-            # sku_elem = product_elem.css_first('div.product-meta > div.product-meta__reference > span.product-meta__sku > span.product-meta__sku-number')
-            # if sku_elem is not None:
-            #     current_product['SKU'] = sku_elem.text(strip=True)
-
-            # cost_elem = tree.css_first('div.product-form__info-content > div.price-list > span.price.price--highlight')
-            # if cost_elem is not None:
-            #     current_product['Cost per item'] = self.extract_price(cost_elem.text(strip=True))
-            # else:
-            #     cost_elem = tree.css_first('div.product-form__info-content > div.price-list > span.price')
-            #     if cost_elem is not None:
-            #         current_product['Cost'] = self.extract_price(cost_elem.text(strip=True))
-
-            # current_product['Price'] = self.get_price(current_product['Cost'])
-
-            # compare_at_price_elem = tree.css_first('div.product-form__info-content > div.price-list > span.price.price--compare')
-            # if compare_at_price_elem is not None:
-            #     current_product['CompareAtPrice'] = self.extract_price(compare_at_price_elem.text(strip=True))
-
             image_elems = tree.css('a.product-gallery__thumbnail')
             image_src_list = list()
             image_alt_text_list = list()
             for elem in image_elems:
                 image_src_list.append(urljoin(self.base_url, elem.attributes.get('href').split('?')[0]))
                 image_alt_text_list.append(elem.css_first('img').attributes.get('alt'))
-            print(image_src_list, image_alt_text_list)
             current_product['Image Src'] = image_src_list
-            # current_product['Image Alt Text'] = image_alt_text_list
-            # current_product['Image Alt Text'] = ''
 
-            video_elems = desc_elem.css('iframe')
-            video_list = list()
-            if video_elems is not None:
-                for video_elem in video_elems:
-                    video_src = video_elem.attributes.get('src')
-                    video_list.append(video_src)
-                current_product['Video Src'] = ','.join(video_list)
+            if desc_elem is not None:
+                video_elems = desc_elem.css('iframe')
+                video_list = list()
+                if video_elems is not None:
+                    for video_elem in video_elems:
+                        video_src = video_elem.attributes.get('src')
+                        video_list.append(video_src)
+                    current_product['Video Src'] = ','.join(video_list)
 
             # rating_elem = tree.css_first('div#stamped-main-widget')
             # if rating_elem is not None:
@@ -403,6 +392,11 @@ class HobbytronScraper:
 
             # Using Pandas
             df = pd.DataFrame.from_records(product_datas)
+            df['Body (HTML)'] = df['Body (HTML)'].str.replace('<h2 class="card__title heading h3">Description</h2>', '')
+            df['Body (HTML)'] = df['Body (HTML)'].apply(self.replace_hobbytron)
+            df['Body (HTML)'] = df['Body (HTML)'].str.replace('World Tech Toys', 'Trendtimes')
+            df['Body (HTML)'] = df['Body (HTML)'].str.replace('World Tech', 'Trendtimes')
+            df['Body (HTML)'] = df['Body (HTML)'].str.replace('<h2 class="card__title heading h3">Description</h2>', '')
 
             # Breakdown Variants
             df = df.explode('Variants', ignore_index=True)
@@ -423,7 +417,6 @@ class HobbytronScraper:
             df.loc[df.duplicated('Handle', keep='first'), variant_row_unused_columns] = ''
 
             df = df.explode('Image Src', ignore_index=True)
-            # df = df.set_index(['Image Src', 'Image Alt Text']).apply(pd.Series.explode).reset_index()
 
             images_row_unused_columns = ['Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags',
                 'Published', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Option3 Name', 'Option3 Value', 'Variant SKU',
@@ -495,9 +488,11 @@ class HobbytronScraper:
 
 
 if __name__ == '__main__':
-    urls = ['https://hobbytron.com/products/sonic-rc-helicopter', 'https://hobbytron.com/products/millennium-falcon-motion-sensing-quadcopter-by-world-tech-toys', 'https://hobbytron.com/products/luggage-playsets', 'https://hobbytron.com/products/ford-f-150-police-monster-struck-and-ford-f-250-super-duty-rc-truck-1-14-scale-bundle', 'https://hobbytron.com/products/buzz-lightyear-mickey-mouse-electronic-tabletop-basketball-playset']
-
     hs = HobbytronScraper()
-    # products_htmls = asyncio.run(hs.fetch_all(urls))
-    # hs.insert_to_db(products_htmls)
+    # collection_urls = [f'https://hobbytron.com/collections/all?page={page}' for page in range(1,27)]
+    # collection_htmls = asyncio.run(hs.fetch_all(collection_urls))
+    # hs.insert_to_db(collection_htmls, database_name='hobbytron_collection.db', table_name='collection_src')
+    # product_urls = hs.get_product_urls()
+    # products_htmls = asyncio.run(hs.fetch_all(product_urls))
+    # hs.insert_to_db(products_htmls, database_name='hobbytron_product.db', table_name='product_src')
     hs.get_data()
