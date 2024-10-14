@@ -3,3 +3,5 @@ selectolax==0.3.21
 python-dotenv==1.0.1
 duckdb==1.1.1
 pandas==2.2.3
+jupyterlab==4.2.5
+ipykernel==6.29.5
