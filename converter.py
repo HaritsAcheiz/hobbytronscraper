@@ -1,8 +1,6 @@
 import os
-from itertools import product
 import pandas as pd
 import re
-import numpy as np
 import json
 from urllib.parse import quote, unquote
 from ast import literal_eval
@@ -10,6 +8,7 @@ from html import unescape
 
 weight_unit_mapper = {'lb': 'POUNDS', 'kg': 'KILOGRAMS', 'g': 'GRAMS', 'oz': 'OUNCES'}
 tracker_mapper = {'shopify': True, '': False}
+
 
 def to_handle(title, alt_title):
     if (pd.isna(title)) | (title == 0):
@@ -39,6 +38,7 @@ def get_title(title, alt_title):
         result = title
 
     return result
+
 
 def generate_category(*args):
     cat_list = [x for x in list(args[0]) if str(x) != 'nan']
@@ -91,6 +91,7 @@ def to_body_html(desc):
         .replace("Oriental Trading", "Trendtimes")
 
     return result
+
 
 def to_shopify(morris_file_path):
     morris_df = pd.read_excel(morris_file_path)
@@ -175,11 +176,13 @@ def fill_opt(opt_name=None, opt_value=None):
 
         return opt_attr
 
+
 def fill_opt_var(opt_name=None, opt_value=None):
     if opt_name != '':
         opt_attr = {'name': opt_value, 'optionName': opt_name}
 
         return opt_attr
+
 
 def fill_media(original_src, alt):
     if original_src != '':
@@ -193,30 +196,31 @@ def fill_media(original_src, alt):
 
 
 def fill_variant_id(shopify_df, product_id_filepath, mode):
-        # Fill variant id
-        variant_ids_df = pd.read_csv(product_id_filepath)
-        shopify_df = pd.merge(shopify_df, variant_ids_df, how='left', left_on='id', right_on='product_id')
-        shopify_df.fillna('', inplace=True)
-        shopify_df.drop(columns=['Unnamed: 0', 'handle', 'product_id'], inplace=True)
-        if mode == 'create':
-            shopify_df.to_csv('data/create_product_variants_with_vids_invids.csv', index=False)
-        elif mode == 'update':
-            shopify_df.to_csv('data/update_product_variants_with_vids_invids.csv', index=False)
-        else:
-            print('Mode is undefined')
+    # Fill variant id
+    variant_ids_df = pd.read_csv(product_id_filepath)
+    shopify_df = pd.merge(shopify_df, variant_ids_df, how='left', left_on='id', right_on='product_id')
+    shopify_df.fillna('', inplace=True)
+    shopify_df.drop(columns=['Unnamed: 0', 'handle', 'product_id'], inplace=True)
+    if mode == 'create':
+        shopify_df.to_csv('data/create_product_variants_with_vids_invids.csv', index=False)
+    elif mode == 'update':
+        shopify_df.to_csv('data/update_product_variants_with_vids_invids.csv', index=False)
+    else:
+        print('Mode is undefined')
 
 
 def str_to_bool(s):
     if (s == 'True') | (s == 'true'):
 
-         return True
+        return True
 
     elif (s == 'False') | (s == 'false'):
 
-         return False
+        return False
 
     else:
-         return s
+
+        return s
 
 
 def get_skus():
@@ -229,7 +233,7 @@ def get_handles(filepath, nrows=250):
     shopify_df = pd.read_csv(filepath)
     try:
         handles = list(shopify_df['Unique Handle'])
-    except:
+    except Exception:
         handles = list(shopify_df['handle'])
     chunked_handles = [handles[i:i + nrows] for i in range(0, len(handles), nrows)]
 
@@ -613,11 +617,13 @@ def merge_images(product_df: pd.DataFrame, image_df: pd.DataFrame, mode='create'
     else:
         print('Mode is undefined')
 
+
 def extract_video_url():
     df = pd.read_excel('data/All_Products_PWHSL.xlsx', usecols=['ProductName', 'FormattedName', 'FullDescription'])
     df['Handle'] = df.apply(lambda x: to_handle(x['ProductName'], alt_title=x['FormattedName']), axis=1)
     sel_df = df[df['FullDescription'].str.contains('https://', na=False)]
     sel_df.to_csv('video_data.csv', index=False)
+
 
 def deduplicate_handles(df):
     # Create a copy of the dataframe to avoid modifying the original
@@ -640,6 +646,7 @@ def deduplicate_handles(df):
     df = df.drop('handle_count', axis=1)
 
     return df
+
 
 # if __name__ == '__main__':
     # to_shopify('data/All_Products_PWHSL.xlsx')

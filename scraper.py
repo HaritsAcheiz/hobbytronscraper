@@ -1,24 +1,23 @@
 from httpx import AsyncClient
-from pandas.core.base import NoNewAttributesMixin
 from selectolax.parser import HTMLParser
 from dataclasses import dataclass
 from dotenv import load_dotenv
 import os
 import asyncio
 import sqlite3
-import duckdb
+# import duckdb
 import re
 import math
 from urllib.parse import urljoin
 import json
 import pandas as pd
-import ast
+#import ast
+
 
 @dataclass
 class HobbytronScraper:
     base_url: str = 'https://hobbytron.com'
     user_agent: str = 'Mozilla/5.0 (X11; Linux x86_64)'
-
 
     def extract_price(self, input_string):
         pattern = r'\d+\.\d{2}'
@@ -37,7 +36,6 @@ class HobbytronScraper:
 
         return f"{result:.2f}"
 
-
     def get_compare_at_price(self, price):
         if (price is None) or (price == 0):
             result = "0.00"
@@ -45,7 +43,6 @@ class HobbytronScraper:
             result = round(float(math.ceil(price * 1.20)), 2)
 
         return f"{result:.2f}"
-
 
     def extract_number(self, input_string):
         # pattern = r'#tab-(\d+)'
@@ -64,10 +61,8 @@ class HobbytronScraper:
 
         return modified_html
 
-
     def get_review(self, product_id):
         url = 'https://hobbytron.com/search?view=static-recently-viewed-products&type=product&q=id:6554003701863'
-
 
     def extract_variants(self, df):
         df['Option1 Value'] = df['Variants'].apply(lambda x: x['option1'])
@@ -89,7 +84,6 @@ class HobbytronScraper:
 
         return df
 
-
     async def fetch(self, aclient, url, limit):
         print(f'Fetching {url}...')
         headers = {
@@ -106,7 +100,6 @@ class HobbytronScraper:
 
         return url, response.text
 
-
     async def fetch_all(self, urls):
         tasks = []
         headers = {
@@ -122,7 +115,6 @@ class HobbytronScraper:
             htmls = await asyncio.gather(*tasks)
 
         return htmls
-
 
     def insert_to_db(self, htmls, database_name, table_name):
         if os.path.exists(database_name):
@@ -143,7 +135,6 @@ class HobbytronScraper:
                 f"INSERT INTO {table_name} (url, html) VALUES(?,?)",
                 html)
             conn.commit()
-
 
     def get_product_urls(self):
         conn = sqlite3.connect("hobbytron_collection.db")
@@ -401,7 +392,6 @@ class HobbytronScraper:
             # Breakdown Variants
             df = df.explode('Variants', ignore_index=True)
             df = self.extract_variants(df)
-
 
             variant_row_unused_columns = ['Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags', 'Published', 'Option1 Name',
                 'Option2 Name', 'Option3 Name', 'Image Src', 'Gift Card', 'SEO Title', 'SEO Description',
