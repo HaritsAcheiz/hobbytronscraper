@@ -11,6 +11,7 @@ from converter import csv_to_jsonl, get_handles
 
 load_dotenv()
 
+
 @dataclass
 class ShopifyApp:
     store_name: str = None
